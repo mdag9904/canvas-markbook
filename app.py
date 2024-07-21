@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import time
 
 # Function to fetch all students with pagination
 def fetch_all_students(api_url, headers, params):
@@ -66,6 +67,5 @@ if st.button("Fetch Students"):
     students_df.to_csv("students_list.csv", index=False)
     st.success("Students list has been saved to 'students_list.csv'")
 
-# Footer
-st.write("Normalized students_df structure:", students_df.columns.tolist())
-st.write("Total unique students fetched:", len(students_df))
+    # Footer
+    st.write("Total unique students fetched:", len(students_df))
