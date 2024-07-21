@@ -100,13 +100,13 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                     for grade in grades:
                         user_id = str(grade['user_id'])  # Ensure user_id is a string
                         assignment_id = grade['assignment_id']
-                        score = grade['grades_current_score'] if 'grades_current_score' in grade else 0
+                        score = grade['entered_grade'] if 'entered_grade' in grade else 0
 
                         # Check if assignment is selected
                         assignment_name = assignments_df.loc[assignments_df['id'] == assignment_id, 'name'].values[0]
                         if assignment_name in selected_assignments:
                             if user_id in student_grades:
-                                student_grades[user_id][assignment_name] = score
+                                student_grades[user_id][assignment_name] = float(score)
                             else:
                                 st.warning(f"User ID {user_id} not found in student_grades")
 
