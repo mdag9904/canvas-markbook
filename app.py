@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-import matplotlib.pyplot as plt
 import re
 
 # Function to extract course ID from link
@@ -81,12 +80,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
             
             selected_assignments = st.multiselect("Select Assignments to Include", assignments_df['name'], key="selected_assignments")
             if selected_assignments:
-                weights = {}
-                for assignment in selected_assignments:
-                    weight = st.number_input(f"Weight for {assignment}", min_value=0.0, max_value=1.0, step=0.1, key=f"weight_{assignment}")
-                    weights[assignment] = weight
-                
-                if st.button("Generate Report"):
+                if st.button("Fetch Grades"):
                     try:
                         grades = get_grades(api_url, api_key, course_id)
                         st.write("Grades JSON structure:", grades)  # Log the grades structure
@@ -110,32 +104,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                             else:
                                 st.warning(f"User ID {user_id} not found in student_grades")
 
-                    # Filter out students with no grades
-                    student_grades = {k: v for k, v in student_grades.items() if v}
-
-                    student_scores = []
-                    for student_id, grades in student_grades.items():
-                        total_score = sum(grades.get(assignment, 0) * weights[assignment] for assignment in selected_assignments)
-                        student_scores.append((student_id, total_score))
-                    
-                    student_scores_df = pd.DataFrame(student_scores, columns=['Student ID', 'Total Score'])
-                    student_scores_df['Student ID'] = student_scores_df['Student ID'].astype(str)  # Ensure 'Student ID' is a string
-                    student_scores_df = student_scores_df.merge(students_df, on='Student ID', how='left')
-                    student_scores_df['Rank'] = student_scores_df['Total Score'].rank(ascending=False)
-                    
-                    st.dataframe(student_scores_df)
-                    
-                    fig, ax = plt.subplots()
-                    ax.hist(student_scores_df['Total Score'], bins=10)
-                    ax.set_title('Distribution of Total Scores')
-                    ax.set_xlabel('Total Score')
-                    ax.set_ylabel('Number of Students')
-                    st.pyplot(fig)
-                    
-                    fig, ax = plt.subplots()
-                    ax.plot(student_scores_df['Student Name'], student_scores_df['Total Score'], marker='o')
-                    ax.set_title('Total Scores by Student')
-                    ax.set_xlabel('Student Name')
-                    ax.set_ylabel('Total Score')
-                    plt.xticks(rotation=90)
-                    st.pyplot(fig)
+                    # Convert the student_grades dictionary to a DataFrame
+                    grades_df = pd.DataFrame.from_dict(student_grades, orient='index').reset_index().rename(columns={'index': 'Student ID'})
+                    grades_df = grades_df.merge(students_df, on='Student ID', how='left')
+                    st.dataframe(grades_df)
