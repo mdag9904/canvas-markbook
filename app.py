@@ -16,10 +16,14 @@ def get_all_students(api_url, api_key, course_id):
     headers = {"Authorization": f"Bearer {api_key}"}
     students = []
     url = f"{api_url}/api/v1/courses/{course_id}/enrollments?type[]=StudentEnrollment&state[]=active"
+    page_number = 1
     while url:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        students.extend(response.json())
+        data = response.json()
+        students.extend(data)
+        st.write(f"Page {page_number}: Fetched {len(data)} students")
+        page_number += 1
         if 'next' in response.links:
             url = response.links['next']['url']
         else:
@@ -60,4 +64,5 @@ if st.button("Load Students") or "students" in st.session_state:
             # Remove duplicates based on 'Student ID'
             students_df.drop_duplicates(subset=['Student ID'], inplace=True)
 
+            st.write(f"Total unique students fetched: {students_df.shape[0]}")
             st.dataframe(students_df)
