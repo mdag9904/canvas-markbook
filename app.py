@@ -56,6 +56,9 @@ if st.button("Fetch Students"):
     # Normalize JSON data into a pandas DataFrame
     students_df = pd.json_normalize(students_data)
 
+    # Remove duplicates
+    students_df = students_df.drop_duplicates(subset=["user_id"])
+
     # Display the DataFrame structure
     st.write("Normalized students_df structure:")
     st.write(students_df.columns.tolist())
