@@ -4,13 +4,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import re
 
-# Function to extract course and assignment IDs from link
-def extract_ids_from_link(link):
-    match = re.search(r'courses/(\d+)/assignments/(\d+)', link)
+# Function to extract course ID from link
+def extract_course_id_from_link(link):
+    match = re.search(r'courses/(\d+)', link)
     if match:
-        return match.group(1), match.group(2)
+        return match.group(1)
     else:
-        return None, None
+        return None
 
 # Function to fetch assignment grades for a course
 def get_grades(api_url, api_key, course_id):
@@ -36,7 +36,7 @@ if st.button("Load Assignments"):
     if not api_key or not course_link:
         st.error("Please provide API Key and Course Link")
     else:
-        course_id, _ = extract_ids_from_link(course_link)
+        course_id = extract_course_id_from_link(course_link)
         if not course_id:
             st.error("Invalid course link")
         else:
