@@ -74,7 +74,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                     for grade in grades:
                         user_id = grade['user_id']
                         assignment_id = grade['assignment_id']
-                        score = grade['score']
+                        score = grade['score'] if grade['score'] is not None else 0
                         
                         if user_id not in student_grades:
                             student_grades[user_id] = {}
@@ -89,7 +89,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                         student_scores.append((student_id, total_score))
                     
                     student_scores_df = pd.DataFrame(student_scores, columns=['Student ID', 'Total Score'])
-                    student_scores_df = student_scores_df.merge(students_df, on='Student ID')
+                    student_scores_df = student_scores_df.merge(students_df, on='Student ID', how='left')
                     student_scores_df['Rank'] = student_scores_df['Total Score'].rank(ascending=False)
                     
                     st.dataframe(student_scores_df)
