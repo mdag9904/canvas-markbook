@@ -1,68 +1,71 @@
 import streamlit as st
 import requests
 import pandas as pd
-import re
 
-# Function to extract course ID from link
-def extract_course_id_from_link(link):
-    match = re.search(r'courses/(\d+)', link)
-    if match:
-        return match.group(1)
-    else:
-        return None
-
-# Function to fetch all pages of student details
-def get_all_students(api_url, api_key, course_id):
-    headers = {"Authorization": f"Bearer {api_key}"}
+# Function to fetch all students with pagination
+def fetch_all_students(api_url, headers, params):
     students = []
-    url = f"{api_url}/api/v1/courses/{course_id}/enrollments?type[]=StudentEnrollment&state[]=active"
     page_number = 1
-    while url:
-        response = requests.get(url, headers=headers)
+
+    while True:
+        response = requests.get(api_url, headers=headers, params=params)
+        
+        if response.status_code == 429:  # Rate limit hit
+            retry_after = int(response.headers.get("Retry-After", 1))
+            st.write(f"Rate limit hit. Retrying after {retry_after} seconds.")
+            time.sleep(retry_after)
+            continue
+        
         response.raise_for_status()
         data = response.json()
         students.extend(data)
-        st.write(f"Page {page_number}: Fetched {len(data)} students")
-        page_number += 1
+        
         if 'next' in response.links:
-            url = response.links['next']['url']
+            api_url = response.links['next']['url']
+            page_number += 1
+            st.write(f"Fetching page {page_number}")
         else:
-            url = None
+            break
+
     return students
 
-# Streamlit app layout
-st.set_page_config(layout="wide")
+# Streamlit app
 st.title("Canvas Course Student List")
 
-api_url = st.text_input("Canvas API URL", "https://canvas-parra.beta.instructure.com")
-api_key = st.text_input("Canvas API Key", type="password")
-course_link = st.text_input("Course Link")
+# User inputs
+api_url_input = st.text_input("Canvas API URL", "https://canvas-parra.beta.instructure.com")
+api_key_input = st.text_input("Canvas API Key", type="password")
+course_link_input = st.text_input("Course Link", "https://canvas-parra.beta.instructure.com/courses/22365")
 
-if st.button("Load Students") or "students" in st.session_state:
-    if not api_key or not course_link:
-        st.error("Please provide API Key and Course Link")
-    else:
-        course_id = extract_course_id_from_link(course_link)
-        if not course_id:
-            st.error("Invalid course link")
-        else:
-            if "students" not in st.session_state:
-                try:
-                    st.session_state.students = get_all_students(api_url, api_key, course_id)
-                except requests.exceptions.RequestException as e:
-                    st.error(f"Error fetching students: {e}")
-                    st.stop()
+if st.button("Fetch Students"):
+    api_url = f"{api_url_input}/api/v1/courses/22365/enrollments"
+    headers = {
+        "Authorization": f"Bearer {api_key_input}"
+    }
+    params = {
+        "per_page": 100,  # Increase per page limit
+        "type": ["StudentEnrollment"],
+        "enrollment_state": "active"
+    }
 
-            # Normalize student data to flatten nested JSON
-            students = st.session_state.students
-            students_df = pd.json_normalize(students, sep='_')
-            st.write("Normalized students_df structure:", students_df.columns.tolist())  # Log the DataFrame structure
+    # Fetch all students
+    students_data = fetch_all_students(api_url, headers, params)
+    st.write(f"Total students fetched: {len(students_data)}")
 
-            # Select relevant columns to display
-            students_df = students_df[['user_id', 'user_name', 'enrollment_state']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
+    # Normalize JSON data into a pandas DataFrame
+    students_df = pd.json_normalize(students_data)
 
-            # Remove duplicates based on 'Student ID'
-            students_df.drop_duplicates(subset=['Student ID'], inplace=True)
+    # Display the DataFrame structure
+    st.write("Normalized students_df structure:")
+    st.write(students_df.columns.tolist())
 
-            st.write(f"Total unique students fetched: {students_df.shape[0]}")
-            st.dataframe(students_df)
+    # Display the DataFrame
+    st.write(students_df)
+
+    # Save to CSV
+    students_df.to_csv("students_list.csv", index=False)
+    st.success("Students list has been saved to 'students_list.csv'")
+
+# Footer
+st.write("Normalized students_df structure:", students_df.columns.tolist())
+st.write("Total unique students fetched:", len(students_df))
