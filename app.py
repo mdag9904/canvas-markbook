@@ -102,12 +102,16 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                         assignment_id = grade['assignment_id']
                         score = grade['score'] if grade['score'] is not None else 0
 
+                        # Check if assignment is selected
                         assignment_name = assignments_df.loc[assignments_df['id'] == assignment_id, 'name'].values[0]
                         if assignment_name in selected_assignments:
                             if user_id in student_grades:
                                 student_grades[user_id][assignment_name] = score
                             else:
                                 st.warning(f"User ID {user_id} not found in student_grades")
+
+                    # Filter out students with no grades
+                    student_grades = {k: v for k, v in student_grades.items() if v}
 
                     student_scores = []
                     for student_id, grades in student_grades.items():
