@@ -88,6 +88,14 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                         st.error(f"Error fetching grades: {e}")
                         st.stop()
 
+                    # Verify student IDs in grades data
+                    grade_user_ids = {str(grade['user_id']) for grade in grades}
+                    st.write("Unique user IDs in grades:", grade_user_ids)
+                    
+                    # Verify student IDs in students data
+                    student_ids = set(students_df['Student ID'].tolist())
+                    st.write("Unique student IDs in students_df:", student_ids)
+
                     student_grades = {str(student['Student ID']): {} for student in students_df.to_dict('records')}
                     st.write("Initialized student_grades:", student_grades)  # Log initialized student_grades
 
