@@ -94,7 +94,10 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                     for grade in grades:
                         user_id = str(grade['user_id'])  # Ensure user_id is a string
                         assignment_id = grade['assignment_id']
-                        score = grade['entered_score'] if 'entered_score' in grade else 0
+                        score = grade.get('entered_score', 0)
+
+                        # Debugging: log each grade entry processed
+                        st.write(f"Processing grade: user_id={user_id}, assignment_id={assignment_id}, score={score}")
 
                         # Check if assignment is selected
                         assignment_name = assignments_df.loc[assignments_df['id'] == assignment_id, 'name'].values[0]
