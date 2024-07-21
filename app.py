@@ -32,7 +32,7 @@ api_url = st.text_input("Canvas API URL", "https://canvas-parra.beta.instructure
 api_key = st.text_input("Canvas API Key", type="password")
 course_link = st.text_input("Course Link")
 
-if st.button("Load Assignments"):
+if st.button("Load Assignments") or "assignments" in st.session_state:
     if not api_key or not course_link:
         st.error("Please provide API Key and Course Link")
     else:
@@ -40,15 +40,16 @@ if st.button("Load Assignments"):
         if not course_id:
             st.error("Invalid course link")
         else:
-            assignments = get_assignments(api_url, api_key, course_id)
-            assignments_df = pd.DataFrame(assignments)
+            if "assignments" not in st.session_state:
+                st.session_state.assignments = get_assignments(api_url, api_key, course_id)
+            assignments_df = pd.DataFrame(st.session_state.assignments)
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
-            selected_assignments = st.multiselect("Select Assignments to Include", assignments_df['name'])
+            selected_assignments = st.multiselect("Select Assignments to Include", assignments_df['name'], key="selected_assignments")
             if selected_assignments:
                 weights = {}
                 for assignment in selected_assignments:
-                    weight = st.number_input(f"Weight for {assignment}", min_value=0.0, max_value=1.0, step=0.1)
+                    weight = st.number_input(f"Weight for {assignment}", min_value=0.0, max_value=1.0, step=0.1, key=f"weight_{assignment}")
                     weights[assignment] = weight
                 
                 if st.button("Generate Report"):
