@@ -24,6 +24,12 @@ def get_assignments(api_url, api_key, course_id):
     response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments", headers=headers)
     return response.json()
 
+# Function to fetch student details
+def get_students(api_url, api_key, course_id):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/enrollments?type[]=StudentEnrollment&state[]=active", headers=headers)
+    return response.json()
+
 # Streamlit app layout
 st.set_page_config(layout="wide")
 st.title("Canvas Course Grade Analysis")
@@ -42,7 +48,13 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
         else:
             if "assignments" not in st.session_state:
                 st.session_state.assignments = get_assignments(api_url, api_key, course_id)
+            if "students" not in st.session_state:
+                st.session_state.students = get_students(api_url, api_key, course_id)
+
             assignments_df = pd.DataFrame(st.session_state.assignments)
+            students_df = pd.DataFrame(st.session_state.students)
+            students_df = students_df[['user_id', 'user']['name']].rename(columns={'user_id': 'Student ID', 'user.name': 'Student Name'})
+
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
             selected_assignments = st.multiselect("Select Assignments to Include", assignments_df['name'], key="selected_assignments")
@@ -54,7 +66,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                 
                 if st.button("Generate Report"):
                     grades = get_grades(api_url, api_key, course_id)
-                    student_grades = {}
+                    student_grades = {student['Student ID']: {} for student in students_df.to_dict('records')}
                     
                     for grade in grades:
                         user_id = grade['user_id']
@@ -69,11 +81,12 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                             student_grades[user_id][assignment_name] = score
                     
                     student_scores = []
-                    for student, grades in student_grades.items():
-                        total_score = sum(grades[assignment] * weights[assignment] for assignment in grades if assignment in weights)
-                        student_scores.append((student, total_score))
+                    for student_id, grades in student_grades.items():
+                        total_score = sum(grades.get(assignment, 0) * weights[assignment] for assignment in selected_assignments)
+                        student_scores.append((student_id, total_score))
                     
                     student_scores_df = pd.DataFrame(student_scores, columns=['Student ID', 'Total Score'])
+                    student_scores_df = student_scores_df.merge(students_df, on='Student ID')
                     student_scores_df['Rank'] = student_scores_df['Total Score'].rank(ascending=False)
                     
                     st.dataframe(student_scores_df)
@@ -86,8 +99,9 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                     st.pyplot(fig)
                     
                     fig, ax = plt.subplots()
-                    ax.plot(student_scores_df['Student ID'], student_scores_df['Total Score'], marker='o')
+                    ax.plot(student_scores_df['Student Name'], student_scores_df['Total Score'], marker='o')
                     ax.set_title('Total Scores by Student')
-                    ax.set_xlabel('Student ID')
+                    ax.set_xlabel('Student Name')
                     ax.set_ylabel('Total Score')
+                    plt.xticks(rotation=90)
                     st.pyplot(fig)
