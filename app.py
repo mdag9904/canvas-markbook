@@ -59,15 +59,22 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
             if "students" not in st.session_state:
                 try:
                     st.session_state.students = get_students(api_url, api_key, course_id)
+                    st.write("Students JSON structure:", st.session_state.students)  # Log the JSON structure
                 except requests.exceptions.RequestException as e:
                     st.error(f"Error fetching students: {e}")
                     st.stop()
 
             assignments_df = pd.DataFrame(st.session_state.assignments)
             
-            # Normalize student data to flatten nested JSON
+            # Use st.write to inspect the raw JSON response structure
+            st.write(st.session_state.students)
+
+            # Assuming we need to adjust based on the logged structure
             students = st.session_state.students
             students_df = pd.json_normalize(students, sep='_')
+            st.write("Normalized students_df structure:", students_df.columns.tolist())  # Log the DataFrame structure
+
+            # Update these column names based on the actual structure
             students_df = students_df[['user_id', 'user.name']].rename(columns={'user_id': 'Student ID', 'user.name': 'Student Name'})
 
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
