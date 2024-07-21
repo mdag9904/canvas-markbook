@@ -11,12 +11,20 @@ def extract_course_id_from_link(link):
     else:
         return None
 
-# Function to fetch student details
-def get_students(api_url, api_key, course_id):
+# Function to fetch all pages of student details
+def get_all_students(api_url, api_key, course_id):
     headers = {"Authorization": f"Bearer {api_key}"}
-    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/enrollments?type[]=StudentEnrollment&state[]=active", headers=headers)
-    response.raise_for_status()
-    return response.json()
+    students = []
+    url = f"{api_url}/api/v1/courses/{course_id}/enrollments?type[]=StudentEnrollment&state[]=active"
+    while url:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        students.extend(response.json())
+        if 'next' in response.links:
+            url = response.links['next']['url']
+        else:
+            url = None
+    return students
 
 # Streamlit app layout
 st.set_page_config(layout="wide")
@@ -36,7 +44,7 @@ if st.button("Load Students") or "students" in st.session_state:
         else:
             if "students" not in st.session_state:
                 try:
-                    st.session_state.students = get_students(api_url, api_key, course_id)
+                    st.session_state.students = get_all_students(api_url, api_key, course_id)
                 except requests.exceptions.RequestException as e:
                     st.error(f"Error fetching students: {e}")
                     st.stop()
