@@ -15,19 +15,22 @@ def extract_course_id_from_link(link):
 # Function to fetch assignment grades for a course
 def get_grades(api_url, api_key, course_id):
     headers = {"Authorization": f"Bearer {api_key}"}
-    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/students/submissions?student_ids[]=all", headers=headers)
+    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/students/submissions?student_ids[]=all&include[]=submission_comments", headers=headers)
+    response.raise_for_status()
     return response.json()
 
 # Function to fetch assignment details
 def get_assignments(api_url, api_key, course_id):
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments", headers=headers)
+    response.raise_for_status()
     return response.json()
 
 # Function to fetch student details
 def get_students(api_url, api_key, course_id):
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.get(f"{api_url}/api/v1/courses/{course_id}/enrollments?type[]=StudentEnrollment&state[]=active", headers=headers)
+    response.raise_for_status()
     return response.json()
 
 # Streamlit app layout
@@ -47,16 +50,25 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
             st.error("Invalid course link")
         else:
             if "assignments" not in st.session_state:
-                st.session_state.assignments = get_assignments(api_url, api_key, course_id)
+                try:
+                    st.session_state.assignments = get_assignments(api_url, api_key, course_id)
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Error fetching assignments: {e}")
+                    st.stop()
+
             if "students" not in st.session_state:
-                st.session_state.students = get_students(api_url, api_key, course_id)
+                try:
+                    st.session_state.students = get_students(api_url, api_key, course_id)
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Error fetching students: {e}")
+                    st.stop()
 
             assignments_df = pd.DataFrame(st.session_state.assignments)
             
             # Normalize student data to flatten nested JSON
             students = st.session_state.students
             students_df = pd.json_normalize(students, sep='_')
-            students_df = students_df[['user_id', 'user_name']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
+            students_df = students_df[['user_id', 'user.name']].rename(columns={'user_id': 'Student ID', 'user.name': 'Student Name'})
 
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
@@ -68,17 +80,19 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                     weights[assignment] = weight
                 
                 if st.button("Generate Report"):
-                    grades = get_grades(api_url, api_key, course_id)
+                    try:
+                        grades = get_grades(api_url, api_key, course_id)
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Error fetching grades: {e}")
+                        st.stop()
+
                     student_grades = {student['Student ID']: {} for student in students_df.to_dict('records')}
                     
                     for grade in grades:
                         user_id = grade['user_id']
                         assignment_id = grade['assignment_id']
                         score = grade['score'] if grade['score'] is not None else 0
-                        
-                        if user_id not in student_grades:
-                            student_grades[user_id] = {}
-                        
+
                         assignment_name = assignments_df.loc[assignments_df['id'] == assignment_id, 'name'].values[0]
                         if assignment_name in selected_assignments:
                             student_grades[user_id][assignment_name] = score
