@@ -74,6 +74,9 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
             # Correct column names based on the normalized DataFrame
             students_df = students_df[['user_id', 'user_name']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
 
+            # Ensure 'Student ID' is a string
+            students_df['Student ID'] = students_df['Student ID'].astype(str)
+
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
             selected_assignments = st.multiselect("Select Assignments to Include", assignments_df['name'], key="selected_assignments")
@@ -112,6 +115,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                         student_scores.append((student_id, total_score))
                     
                     student_scores_df = pd.DataFrame(student_scores, columns=['Student ID', 'Total Score'])
+                    student_scores_df['Student ID'] = student_scores_df['Student ID'].astype(str)  # Ensure 'Student ID' is a string
                     student_scores_df = student_scores_df.merge(students_df, on='Student ID', how='left')
                     student_scores_df['Rank'] = student_scores_df['Total Score'].rank(ascending=False)
                     
