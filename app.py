@@ -52,8 +52,11 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                 st.session_state.students = get_students(api_url, api_key, course_id)
 
             assignments_df = pd.DataFrame(st.session_state.assignments)
-            students_df = pd.DataFrame(st.session_state.students)
-            students_df = students_df[['user_id', 'user']['name']].rename(columns={'user_id': 'Student ID', 'user.name': 'Student Name'})
+            
+            # Normalize student data to flatten nested JSON
+            students = st.session_state.students
+            students_df = pd.json_normalize(students, sep='_')
+            students_df = students_df[['user_id', 'user_name']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
 
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
