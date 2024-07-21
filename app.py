@@ -66,16 +66,13 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
 
             assignments_df = pd.DataFrame(st.session_state.assignments)
             
-            # Use st.write to inspect the raw JSON response structure
-            st.write(st.session_state.students)
-
-            # Assuming we need to adjust based on the logged structure
+            # Normalize student data to flatten nested JSON
             students = st.session_state.students
             students_df = pd.json_normalize(students, sep='_')
             st.write("Normalized students_df structure:", students_df.columns.tolist())  # Log the DataFrame structure
 
-            # Update these column names based on the actual structure
-            students_df = students_df[['user_id', 'user.name']].rename(columns={'user_id': 'Student ID', 'user.name': 'Student Name'})
+            # Correct column names based on the normalized DataFrame
+            students_df = students_df[['user_id', 'user_name']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
 
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
