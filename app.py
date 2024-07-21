@@ -75,7 +75,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
             st.write("Normalized students_df structure:", students_df.columns.tolist())  # Log the DataFrame structure
 
             # Update these column names based on the actual structure
-            students_df = students_df[['user_id', 'user_name']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
+            students_df = students_df[['user_id', 'user.name']].rename(columns={'user_id': 'Student ID', 'user.name': 'Student Name'})
 
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
@@ -89,21 +89,26 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
                 if st.button("Generate Report"):
                     try:
                         grades = get_grades(api_url, api_key, course_id)
+                        st.write("Grades JSON structure:", grades)  # Log the grades structure
                     except requests.exceptions.RequestException as e:
                         st.error(f"Error fetching grades: {e}")
                         st.stop()
 
-                    student_grades = {student['Student ID']: {} for student in students_df.to_dict('records')}
-                    
+                    student_grades = {str(student['Student ID']): {} for student in students_df.to_dict('records')}
+                    st.write("Initialized student_grades:", student_grades)  # Log initialized student_grades
+
                     for grade in grades:
-                        user_id = grade['user_id']
+                        user_id = str(grade['user_id'])  # Ensure user_id is a string
                         assignment_id = grade['assignment_id']
                         score = grade['score'] if grade['score'] is not None else 0
 
                         assignment_name = assignments_df.loc[assignments_df['id'] == assignment_id, 'name'].values[0]
                         if assignment_name in selected_assignments:
-                            student_grades[user_id][assignment_name] = score
-                    
+                            if user_id in student_grades:
+                                student_grades[user_id][assignment_name] = score
+                            else:
+                                st.warning(f"User ID {user_id} not found in student_grades")
+
                     student_scores = []
                     for student_id, grades in student_grades.items():
                         total_score = sum(grades.get(assignment, 0) * weights[assignment] for assignment in selected_assignments)
