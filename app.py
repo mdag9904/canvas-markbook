@@ -57,4 +57,7 @@ if st.button("Load Students") or "students" in st.session_state:
             # Select relevant columns to display
             students_df = students_df[['user_id', 'user_name', 'enrollment_state']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
 
+            # Remove duplicates based on 'Student ID'
+            students_df.drop_duplicates(subset=['Student ID'], inplace=True)
+
             st.dataframe(students_df)
