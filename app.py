@@ -75,7 +75,7 @@ if st.button("Load Assignments") or "assignments" in st.session_state:
             st.write("Normalized students_df structure:", students_df.columns.tolist())  # Log the DataFrame structure
 
             # Update these column names based on the actual structure
-            students_df = students_df[['user_id', 'user.name']].rename(columns={'user_id': 'Student ID', 'user.name': 'Student Name'})
+            students_df = students_df[['user_id', 'user_name']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
 
             st.dataframe(assignments_df[['id', 'name', 'points_possible']])
             
