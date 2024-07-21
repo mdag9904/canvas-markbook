@@ -28,7 +28,7 @@ def get_assignments(api_url, api_key, course_id):
 st.set_page_config(layout="wide")
 st.title("Canvas Course Grade Analysis")
 
-api_url = st.text_input("Canvas API URL", "https://canvas.parra.catholic.edu.au")
+api_url = st.text_input("Canvas API URL", "https://canvas-parra.beta.instructure.com")
 api_key = st.text_input("Canvas API Key", type="password")
 course_link = st.text_input("Course Link")
 
