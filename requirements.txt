@@ -1,4 +1,4 @@
 streamlit
-requests
 pandas
-matplotlib
+canvasapi
+fuzzywuzzy
