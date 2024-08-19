@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import csv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration
 API_KEY = "11905~VUKvENv3Ft7Ckn39Jy2na878NEtaWaD9vAhZWmxv7LNhWBTPR382YBrMXvTmz7yU"
@@ -46,7 +47,22 @@ def get_all_rubric_assessments(course_id, assignment_id):
         url = response.links.get('next', {}).get('url')
     return submissions
 
-# Function to extract and export rubric marks to CSV
+# Function to process submission and fetch details concurrently
+def process_submission(course_id, submission, criterion_titles):
+    user_id = submission.get('user_id')
+    user_details = get_user_details(course_id, user_id)
+    student_name = user_details.get('name', 'N/A')
+    rubric_assessment = submission.get('rubric_assessment', {})
+    
+    row = {'Student Name': student_name}
+    for criterion_id, assessment in rubric_assessment.items():
+        criterion_title = criterion_titles.get(criterion_id)
+        if criterion_title:  # Only add it if the criterion title exists in fieldnames
+            row[criterion_title] = assessment.get('points', 'N/A')
+    
+    return row
+
+# Function to extract and export rubric marks to CSV using concurrency
 def export_rubric_marks_to_csv(assignment_link):
     course_id, assignment_id = extract_ids_from_link(assignment_link)
     submissions = get_all_rubric_assessments(course_id, assignment_id)
@@ -62,23 +78,14 @@ def export_rubric_marks_to_csv(assignment_link):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
-        for submission in submissions:
-            user_id = submission.get('user_id')
-            user_details = get_user_details(course_id, user_id)
-            student_name = user_details.get('name', 'N/A')
-            rubric_assessment = submission.get('rubric_assessment', {})
-            
-            row = {'Student Name': student_name}
-            for criterion_id, assessment in rubric_assessment.items():
-                criterion_title = criterion_titles.get(criterion_id)
-                if criterion_title:  # Only add it if the criterion title exists in fieldnames
-                    row[criterion_title] = assessment.get('points', 'N/A')
-            
-            # Skip rows with fields that don't match fieldnames
-            try:
-                writer.writerow(row)
-            except ValueError as e:
-                st.warning(f"Skipped a row due to a mismatch: {e}")
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(process_submission, course_id, submission, criterion_titles): submission for submission in submissions}
+            for future in as_completed(futures):
+                try:
+                    row = future.result()
+                    writer.writerow(row)
+                except ValueError as e:
+                    st.warning(f"Skipped a row due to a mismatch: {e}")
 
     return csv_filename
 
