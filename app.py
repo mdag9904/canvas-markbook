@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def extract_ids_from_link(link):
@@ -40,6 +41,8 @@ def fetch_all_students(api_url, api_key, course_id):
 def fetch_current_rubric(api_url, api_key, course_id, assignment_id, user_id):
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}?include[]=rubric_assessment", headers=headers)
+    if response.status_code != 200:
+        return {}
     submission = response.json()
     return submission.get('rubric_assessment', {})
 
@@ -47,19 +50,29 @@ def extract_rubric_marks(api_url, api_key, course_id, assignment_id):
     students = fetch_all_students(api_url, api_key, course_id)
     results = []
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
+
+    total_students = len(students)
+
+    with ThreadPoolExecutor(max_workers=5) as executor:  # Reduced max_workers to 5
         tasks = []
-        for student in students:
+        for i, student in enumerate(students):
             user_id = student['id']
             tasks.append(executor.submit(fetch_current_rubric, api_url, api_key, course_id, assignment_id, user_id))
+            progress_text.text(f"Processing student {i + 1}/{total_students}")
+            progress_bar.progress((i + 1) / total_students)
 
-        for future in as_completed(tasks):
+        for i, future in enumerate(as_completed(tasks)):
             rubric_assessment = future.result()
-            result = {"User ID": user_id}
+            result = {"User ID": students[i]['id']}
             for criterion_id, details in rubric_assessment.items():
                 result[criterion_id] = details.get('points', 'N/A')
                 result[f"{criterion_id}_comments"] = details.get('comments', 'No comments')
             results.append(result)
+
+    progress_text.text("Finished processing all students.")
+    progress_bar.empty()
 
     results_df = pd.DataFrame(results)
     return results_df
@@ -88,7 +101,6 @@ if st.button("Extract Marks"):
             st.error("Invalid assignment link")
         else:
             st.info("Fetching rubric marks, please wait...")
-            criteria = get_rubric_criteria(api_url, api_key, course_id, assignment_id)
             results_df = extract_rubric_marks(api_url, api_key, course_id, assignment_id)
             
             if results_df.empty:
