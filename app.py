@@ -1,110 +1,104 @@
 import streamlit as st
 import requests
-import pandas as pd
-import re
+import csv
 
-def extract_ids_from_link(link):
-    match = re.search(r'courses/(\d+)/assignments/(\d+)', link)
-    if match:
-        return match.group(1), match.group(2)
-    else:
-        return None, None
+# Configuration
+API_KEY = "11905~VUKvENv3Ft7Ckn39Jy2na878NEtaWaD9vAhZWmxv7LNhWBTPR382YBrMXvTmz7yU"
+BASE_URL = "https://canvas.parra.catholic.edu.au/api/v1"
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
-def get_rubric_details(api_url, api_key, course_id, assignment_id):
-    headers = {"Authorization": f"Bearer {api_key}"}
-    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}", headers=headers)
+# Function to extract course ID and assignment ID from the link
+def extract_ids_from_link(assignment_link):
+    parts = assignment_link.split('/')
+    course_id = parts[-3]
+    assignment_id = parts[-1]
+    return course_id, assignment_id
+
+# Function to get user details by user_id
+def get_user_details(course_id, user_id):
+    url = f"{BASE_URL}/courses/{course_id}/users/{user_id}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    return response.json()
+
+# Function to get rubric details from the assignment
+def get_rubric_details(course_id, assignment_id):
+    url = f"{BASE_URL}/courses/{course_id}/assignments/{assignment_id}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
     assignment_data = response.json()
     rubric_criteria = assignment_data.get('rubric', [])
-    return {criterion['id']: criterion['description'] for criterion in rubric_criteria}
+    return rubric_criteria
 
-def fetch_all_students(api_url, api_key, course_id):
-    headers = {"Authorization": f"Bearer {api_key}"}
-    students = []
-    page = 1
-    while True:
-        response = requests.get(f"{api_url}/api/v1/courses/{course_id}/students?per_page=100&page={page}", headers=headers)
-        data = response.json()
-        if not data:
-            break
-        students.extend(data)
-        page += 1
-    return students
+# Function to get all pages of rubric assessments
+def get_all_rubric_assessments(course_id, assignment_id):
+    submissions = []
+    url = f"{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions"
+    params = {
+        'include[]': 'rubric_assessment',
+        'per_page': 100
+    }
+    while url:
+        response = requests.get(url, headers=HEADERS, params=params)
+        response.raise_for_status()
+        submissions.extend(response.json())
+        # Check if there's a next page
+        url = response.links.get('next', {}).get('url')
+    return submissions
 
-def fetch_current_rubric(api_url, api_key, course_id, assignment_id, user_id):
-    headers = {"Authorization": f"Bearer {api_key}"}
-    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}?include[]=rubric_assessment", headers=headers)
-    if response.status_code != 200:
-        return {}
-    submission = response.json()
-    return submission.get('rubric_assessment', {})
-
-def extract_rubric_marks(api_url, api_key, course_id, assignment_id):
-    students = fetch_all_students(api_url, api_key, course_id)
-    rubric_criteria = get_rubric_details(api_url, api_key, course_id, assignment_id)
-    results = []
-
-    log_display = st.empty()
-    log_text = ""
-
-    for i, student in enumerate(students):
-        user_id = student['id']
-        log_text += f"\nFetching marks for Student {user_id} ({i+1}/{len(students)})"
-        log_display.text(log_text)
-        
-        rubric_assessment = fetch_current_rubric(api_url, api_key, course_id, assignment_id, user_id)
-        result = {"Student Name": student.get('name', 'N/A')}
-        for criterion_id, details in rubric_assessment.items():
-            criterion_title = rubric_criteria.get(criterion_id, f'Criterion {criterion_id}')
-            points = details.get('points', 'N/A')
-            result[criterion_title] = points
-            
-            log_text += f"\n  {criterion_title}: {points} points"
-            log_display.text(log_text)
-
-        results.append(result)
+# Function to extract and export rubric marks to CSV
+def export_rubric_marks_to_csv(assignment_link):
+    course_id, assignment_id = extract_ids_from_link(assignment_link)
+    submissions = get_all_rubric_assessments(course_id, assignment_id)
     
-    results_df = pd.DataFrame(results)
-    return results_df
+    # Get rubric criterion names
+    rubric_criteria = get_rubric_details(course_id, assignment_id)
+    criterion_titles = {criterion['id']: criterion['description'] for criterion in rubric_criteria}
 
-# Streamlit GUI
-st.set_page_config(layout="wide")
+    # Create a CSV file and write data
+    csv_filename = 'rubric_marks.csv'
+    with open(csv_filename, 'w', newline='') as csvfile:
+        fieldnames = ['Student Name'] + list(criterion_titles.values())
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
 
-# Center the logo
-left_column, center_column, right_column = st.columns([2.2, 2, 1])
-with center_column:
-    st.image("logo.png", width=150)  # Ensure the image path is correct
-
-# Center the title
-st.markdown("<h1 style='text-align: center;'>Canvas Rubric Extractor</h1>", unsafe_allow_html=True)
-
-api_url = "https://canvas.parra.catholic.edu.au"
-api_key = "11905~VUKvENv3Ft7Ckn39Jy2na878NEtaWaD9vAhZWmxv7LNhWBTPR382YBrMXvTmz7yU"
-assignment_link = st.text_input("Assignment Link:")
-
-if st.button("Extract Marks"):
-    if not assignment_link:
-        st.error("Please provide Assignment Link")
-    else:
-        course_id, assignment_id = extract_ids_from_link(assignment_link)
-        if not course_id or not assignment_id:
-            st.error("Invalid assignment link")
-        else:
-            st.info("Fetching rubric marks, please wait...")
-
-            results_df = extract_rubric_marks(api_url, api_key, course_id, assignment_id)
+        for submission in submissions:
+            user_id = submission.get('user_id')
+            user_details = get_user_details(course_id, user_id)
+            student_name = user_details.get('name', 'N/A')
+            rubric_assessment = submission.get('rubric_assessment', {})
             
-            if results_df.empty:
-                st.warning("No rubric marks were found for this assignment.")
-            else:
-                st.write("### Extracted Rubric Marks")
-                st.dataframe(results_df)  # Display the extracted marks in a table
-                st.success("Rubric marks extracted successfully")
+            row = {'Student Name': student_name}
+            for criterion_id, assessment in rubric_assessment.items():
+                criterion_title = criterion_titles.get(criterion_id, f'Criterion {criterion_id}')
+                row[criterion_title] = assessment.get('points', 'N/A')
+            
+            writer.writerow(row)
 
-                # Optionally, allow the user to download the dataframe as a CSV
-                csv = results_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download as CSV",
-                    data=csv,
-                    file_name='rubric_marks.csv',
-                    mime='text/csv',
-                )
+    return csv_filename
+
+# Streamlit App
+def main():
+    st.title("Canvas Rubric Marks Exporter")
+    
+    assignment_link = st.text_input("Please paste the Canvas assignment link:")
+
+    if st.button("Export Rubric Marks"):
+        if assignment_link:
+            try:
+                csv_filename = export_rubric_marks_to_csv(assignment_link)
+                st.success(f"Rubric marks have been exported to {csv_filename}.")
+                with open(csv_filename, 'rb') as f:
+                    st.download_button(
+                        label="Download CSV",
+                        data=f,
+                        file_name=csv_filename,
+                        mime='text/csv',
+                    )
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+        else:
+            st.warning("Please enter a valid Canvas assignment link.")
+
+if __name__ == "__main__":
+    main()
