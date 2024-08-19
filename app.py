@@ -25,70 +25,45 @@ def get_rubric_criteria(api_url, api_key, course_id, assignment_id):
         criteria[criterion['description']] = {'id': criterion['id'], 'ratings': sorted(ratings, key=lambda x: x[1])}
     return criteria
 
-def match_points_to_rating(points, ratings):
-    if points == 0:
-        return "No Submission", 0.0
-    for i, (description, rating_points) in enumerate(ratings):
-        if points <= rating_points:
-            return description, points
-        if i < len(ratings) - 1 and points < ratings[i + 1][1]:
-            return description, points
-    return "Below Minimum", points
-
-def fetch_current_rubric(api_url, api_key, course_id, assignment_id, sis_user_id):
+def fetch_all_students(api_url, api_key, course_id):
     headers = {"Authorization": f"Bearer {api_key}"}
-    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/sis_user_id:{sis_user_id}?include[]=rubric_assessment", headers=headers)
+    students = []
+    page = 1
+    while True:
+        response = requests.get(f"{api_url}/api/v1/courses/{course_id}/students?per_page=100&page={page}", headers=headers)
+        data = response.json()
+        if not data:
+            break
+        students.extend(data)
+        page += 1
+    return students
+
+def fetch_current_rubric(api_url, api_key, course_id, assignment_id, user_id):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}?include[]=rubric_assessment", headers=headers)
     submission = response.json()
     return submission.get('rubric_assessment', {})
 
-def update_rubric_for_student(api_url, api_key, course_id, assignment_id, sis_user_id, rubric_assessment):
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "rubric_assessment": rubric_assessment,
-        "posted_grade": sum([criterion['points'] for criterion in rubric_assessment.values()])
-    }
-    try:
-        response = requests.put(f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/sis_user_id:{sis_user_id}", headers=headers, json=data)
-        response.raise_for_status()
-        st.write(f"Updated rubric for student {sis_user_id}")
-    except requests.exceptions.RequestException as e:
-        st.write(f"Failed to update rubric for student {sis_user_id}: {e}")
-
-def process_csv(api_url, api_key, file_path, course_id, assignment_id, criteria):
-    df = pd.read_csv(file_path)
-    tasks = []
+def extract_rubric_marks(api_url, api_key, course_id, assignment_id):
+    students = fetch_all_students(api_url, api_key, course_id)
+    results = []
 
     with ThreadPoolExecutor(max_workers=10) as executor:
-        for index, row in df.iterrows():
-            sis_user_id = row['SIS User ID']
-            current_rubric = fetch_current_rubric(api_url, api_key, course_id, assignment_id, sis_user_id)
-            rubric_assessment = current_rubric.copy()
-
-            for i, (outcome, details) in enumerate(criteria.items(), start=1):
-                column_name = next((col for col in df.columns if col.startswith(outcome)), None)
-                comment_column_name = f"Comments{i}"
-                if column_name and column_name in row:
-                    points = row[column_name]
-                    comment = row.get(comment_column_name, None)
-                    if pd.isna(points) or points == '-':
-                        st.write(f"Skipping User {sis_user_id} for {outcome} due to missing points")
-                        continue
-                    rating, matched_points = match_points_to_rating(points, details['ratings'])
-                    if pd.isna(comment):
-                        comment = None
-                    rubric_assessment[details['id']] = {'points': matched_points}
-                    if comment:
-                        rubric_assessment[details['id']]['comments'] = comment
-                    st.write(f"Processing User {sis_user_id}: {outcome} Points = {points}, Rating = {rating}, Matched Points = {matched_points}, Comment = {comment}")
-
-            if rubric_assessment != current_rubric:
-                tasks.append(executor.submit(update_rubric_for_student, api_url, api_key, course_id, assignment_id, sis_user_id, rubric_assessment))
+        tasks = []
+        for student in students:
+            user_id = student['id']
+            tasks.append(executor.submit(fetch_current_rubric, api_url, api_key, course_id, assignment_id, user_id))
 
         for future in as_completed(tasks):
-            future.result()
+            rubric_assessment = future.result()
+            result = {"User ID": user_id}
+            for criterion_id, details in rubric_assessment.items():
+                result[criterion_id] = details.get('points', 'N/A')
+                result[f"{criterion_id}_comments"] = details.get('comments', 'No comments')
+            results.append(result)
+
+    results_df = pd.DataFrame(results)
+    return results_df
 
 # Streamlit GUI
 st.set_page_config(layout="wide")
@@ -99,23 +74,26 @@ with center_column:
     st.image("logo.png", width=150)  # Ensure the image path is correct
 
 # Center the title
-st.markdown("<h1 style='text-align: center;'>Canvas Rubric Uploader</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>Canvas Rubric Extractor</h1>", unsafe_allow_html=True)
 
-api_url = "https://canvas-parra.beta.instructure.com"
-api_key = st.text_input("Canvas API Key:", type="password")
+api_url = "https://canvas.parra.catholic.edu.au"
+api_key = "11905~VUKvENv3Ft7Ckn39Jy2na878NEtaWaD9vAhZWmxv7LNhWBTPR382YBrMXvTmz7yU"
 assignment_link = st.text_input("Assignment Link:")
 
-uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-
-if st.button("Upload CSV") and uploaded_file is not None:
-    if not api_key or not assignment_link:
-        st.error("Please provide API Key and Assignment Link")
+if st.button("Extract Marks"):
+    if not assignment_link:
+        st.error("Please provide Assignment Link")
     else:
         course_id, assignment_id = extract_ids_from_link(assignment_link)
         if not course_id or not assignment_id:
             st.error("Invalid assignment link")
         else:
+            st.info("Fetching rubric marks, please wait...")
             criteria = get_rubric_criteria(api_url, api_key, course_id, assignment_id)
-            st.write(f"Rubric Criteria: {json.dumps(criteria, indent=2)}")
-            process_csv(api_url, api_key, uploaded_file, course_id, assignment_id, criteria)
-            st.success("Rubric assessments processed successfully")
+            results_df = extract_rubric_marks(api_url, api_key, course_id, assignment_id)
+            st.success("Rubric marks extracted successfully")
+            st.write(results_df)
+            
+            # Provide an option to download the results as a CSV file
+            csv = results_df.to_csv(index=False)
+            st.download_button(label="Download CSV", data=csv, file_name="rubric_marks.csv", mime='text/csv')
