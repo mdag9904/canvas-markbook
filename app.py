@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import re
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def extract_ids_from_link(link):
@@ -50,30 +49,27 @@ def extract_rubric_marks(api_url, api_key, course_id, assignment_id):
     students = fetch_all_students(api_url, api_key, course_id)
     results = []
 
-    progress_text = st.empty()
-    progress_bar = st.progress(0)
+    # Setting up the log display
+    log_display = st.empty()
+    log_text = ""
 
-    total_students = len(students)
+    for i, student in enumerate(students):
+        user_id = student['id']
+        log_text += f"\nFetching marks for Student {user_id} ({i+1}/{len(students)})"
+        log_display.text(log_text)
+        
+        rubric_assessment = fetch_current_rubric(api_url, api_key, course_id, assignment_id, user_id)
+        result = {"User ID": user_id}
+        for criterion_id, details in rubric_assessment.items():
+            points = details.get('points', 'N/A')
+            comments = details.get('comments', 'No comments')
+            result[criterion_id] = points
+            result[f"{criterion_id}_comments"] = comments
+            log_text += f"\n  Criterion {criterion_id}: {points} points, Comments: {comments}"
+            log_display.text(log_text)
 
-    with ThreadPoolExecutor(max_workers=5) as executor:  # Reduced max_workers to 5
-        tasks = []
-        for i, student in enumerate(students):
-            user_id = student['id']
-            tasks.append(executor.submit(fetch_current_rubric, api_url, api_key, course_id, assignment_id, user_id))
-            progress_text.text(f"Processing student {i + 1}/{total_students}")
-            progress_bar.progress((i + 1) / total_students)
-
-        for i, future in enumerate(as_completed(tasks)):
-            rubric_assessment = future.result()
-            result = {"User ID": students[i]['id']}
-            for criterion_id, details in rubric_assessment.items():
-                result[criterion_id] = details.get('points', 'N/A')
-                result[f"{criterion_id}_comments"] = details.get('comments', 'No comments')
-            results.append(result)
-
-    progress_text.text("Finished processing all students.")
-    progress_bar.empty()
-
+        results.append(result)
+    
     results_df = pd.DataFrame(results)
     return results_df
 
@@ -101,6 +97,7 @@ if st.button("Extract Marks"):
             st.error("Invalid assignment link")
         else:
             st.info("Fetching rubric marks, please wait...")
+
             results_df = extract_rubric_marks(api_url, api_key, course_id, assignment_id)
             
             if results_df.empty:
@@ -108,8 +105,4 @@ if st.button("Extract Marks"):
             else:
                 st.write("### Extracted Rubric Marks")
                 st.dataframe(results_df)  # Display the extracted marks in a table
-
-                # Provide an option to download the results as a CSV file
-                csv = results_df.to_csv(index=False)
-                st.download_button(label="Download CSV", data=csv, file_name="rubric_marks.csv", mime='text/csv')
                 st.success("Rubric marks extracted successfully")
