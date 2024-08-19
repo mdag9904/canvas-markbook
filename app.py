@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import re
-import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def extract_ids_from_link(link):
@@ -91,9 +90,14 @@ if st.button("Extract Marks"):
             st.info("Fetching rubric marks, please wait...")
             criteria = get_rubric_criteria(api_url, api_key, course_id, assignment_id)
             results_df = extract_rubric_marks(api_url, api_key, course_id, assignment_id)
-            st.success("Rubric marks extracted successfully")
-            st.write(results_df)
             
-            # Provide an option to download the results as a CSV file
-            csv = results_df.to_csv(index=False)
-            st.download_button(label="Download CSV", data=csv, file_name="rubric_marks.csv", mime='text/csv')
+            if results_df.empty:
+                st.warning("No rubric marks were found for this assignment.")
+            else:
+                st.write("### Extracted Rubric Marks")
+                st.dataframe(results_df)  # Display the extracted marks in a table
+
+                # Provide an option to download the results as a CSV file
+                csv = results_df.to_csv(index=False)
+                st.download_button(label="Download CSV", data=csv, file_name="rubric_marks.csv", mime='text/csv')
+                st.success("Rubric marks extracted successfully")
