@@ -70,10 +70,15 @@ def export_rubric_marks_to_csv(assignment_link):
             
             row = {'Student Name': student_name}
             for criterion_id, assessment in rubric_assessment.items():
-                criterion_title = criterion_titles.get(criterion_id, f'Criterion {criterion_id}')
-                row[criterion_title] = assessment.get('points', 'N/A')
+                criterion_title = criterion_titles.get(criterion_id)
+                if criterion_title:  # Only add it if the criterion title exists in fieldnames
+                    row[criterion_title] = assessment.get('points', 'N/A')
             
-            writer.writerow(row)
+            # Skip rows with fields that don't match fieldnames
+            try:
+                writer.writerow(row)
+            except ValueError as e:
+                st.warning(f"Skipped a row due to a mismatch: {e}")
 
     return csv_filename
 
