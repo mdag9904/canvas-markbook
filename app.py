@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def extract_ids_from_link(link):
     match = re.search(r'courses/(\d+)/assignments/(\d+)', link)
@@ -11,18 +10,12 @@ def extract_ids_from_link(link):
     else:
         return None, None
 
-def get_rubric_criteria(api_url, api_key, course_id, assignment_id):
+def get_rubric_details(api_url, api_key, course_id, assignment_id):
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}", headers=headers)
-    assignment = response.json()
-    rubric = assignment.get('rubric', [])
-    criteria = {}
-    for criterion in rubric:
-        ratings = []
-        for rating in criterion['ratings']:
-            ratings.append((rating['description'], rating['points']))
-        criteria[criterion['description']] = {'id': criterion['id'], 'ratings': sorted(ratings, key=lambda x: x[1])}
-    return criteria
+    assignment_data = response.json()
+    rubric_criteria = assignment_data.get('rubric', [])
+    return {criterion['id']: criterion['description'] for criterion in rubric_criteria}
 
 def fetch_all_students(api_url, api_key, course_id):
     headers = {"Authorization": f"Bearer {api_key}"}
@@ -47,9 +40,9 @@ def fetch_current_rubric(api_url, api_key, course_id, assignment_id, user_id):
 
 def extract_rubric_marks(api_url, api_key, course_id, assignment_id):
     students = fetch_all_students(api_url, api_key, course_id)
+    rubric_criteria = get_rubric_details(api_url, api_key, course_id, assignment_id)
     results = []
 
-    # Setting up the log display
     log_display = st.empty()
     log_text = ""
 
@@ -59,13 +52,13 @@ def extract_rubric_marks(api_url, api_key, course_id, assignment_id):
         log_display.text(log_text)
         
         rubric_assessment = fetch_current_rubric(api_url, api_key, course_id, assignment_id, user_id)
-        result = {"User ID": user_id}
+        result = {"Student Name": student.get('name', 'N/A')}
         for criterion_id, details in rubric_assessment.items():
+            criterion_title = rubric_criteria.get(criterion_id, f'Criterion {criterion_id}')
             points = details.get('points', 'N/A')
-            comments = details.get('comments', 'No comments')
-            result[criterion_id] = points
-            result[f"{criterion_id}_comments"] = comments
-            log_text += f"\n  Criterion {criterion_id}: {points} points, Comments: {comments}"
+            result[criterion_title] = points
+            
+            log_text += f"\n  {criterion_title}: {points} points"
             log_display.text(log_text)
 
         results.append(result)
@@ -106,3 +99,12 @@ if st.button("Extract Marks"):
                 st.write("### Extracted Rubric Marks")
                 st.dataframe(results_df)  # Display the extracted marks in a table
                 st.success("Rubric marks extracted successfully")
+
+                # Optionally, allow the user to download the dataframe as a CSV
+                csv = results_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name='rubric_marks.csv',
+                    mime='text/csv',
+                )
