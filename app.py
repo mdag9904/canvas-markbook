@@ -103,12 +103,18 @@ def export_rubric_marks_to_csv(assignment_link):
 
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = {executor.submit(process_submission, course_id, submission, criterion_titles, student_details): submission for submission in submissions}
+            rows = []
             for future in as_completed(futures):
                 try:
                     row = future.result()
-                    writer.writerow(row)
+                    rows.append(row)
                 except ValueError as e:
                     st.warning(f"Skipped a row due to a mismatch: {e}")
+
+        # Sort rows by Homeroom in numerical order
+        sorted_rows = sorted(rows, key=lambda x: int(x['Homeroom']) if x['Homeroom'].isdigit() else float('inf'))
+        for row in sorted_rows:
+            writer.writerow(row)
 
     return csv_filename
 
