@@ -112,7 +112,7 @@ def export_rubric_marks_to_csv(assignment_link):
                     st.warning(f"Skipped a row due to a mismatch: {e}")
 
         # Sort rows by Homeroom in numerical order
-        sorted_rows = sorted(rows, key=lambda x: int(x['Homeroom']) if str(x['Homeroom']).isdigit() else float('inf'))
+        sorted_rows = sorted(rows, key=lambda x: (str(x['Homeroom']).isdigit(), int(x['Homeroom']) if str(x['Homeroom']).isdigit() else float('inf')))
         for row in sorted_rows:
             writer.writerow(row)
 
